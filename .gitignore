@@ -32,6 +32,13 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# data files (private datasets)
+*.xlsx
+*.xls
+*.csv
+*.pkl
 
 # vercel
 .vercel
