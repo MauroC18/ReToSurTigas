@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ReToSurTigas - Sistema de Optimización y Gestión de Turnos
 
-## Getting Started
+Sistema inteligente para la predicción, dimensionamiento y gestión de turnos de atención al cliente en sedes de Surtigas.
+Permite analizar la demanda histórica, simular colas de espera con modelos matemáticos (Erlang-C), calcular dotaciones óptimas de asesores y evaluar escenarios de contingencia en tiempo real.
 
-First, run the development server:
+## Requisitos e Instalación
+
+- **Node.js**: >= 18.x
+- **Gestor de paquetes**: npm (o yarn/pnpm)
 
 ```bash
+# Instalar dependencias
+npm install
+
+# Iniciar servidor de desarrollo local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Verificar tipos y reglas de estilo
+npx tsc --noEmit
+npm run lint
+
+# Generar compilación para producción
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Estructura de Carpetas
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+surtigas-turno/
+├── app/          # Rutas y páginas de la aplicación (Next.js App Router)
+├── components/   # Componentes de interfaz de usuario reutilizables
+├── lib/          # Lógica de negocio, modelos matemáticos (colas/Erlang) y datos
+├── docs/         # Documentación de arquitectura y decisiones de diseño
+├── public/       # Recursos estáticos
+└── .github/      # Plantillas y flujos de integración continua
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+> **Regla de arquitectura**: Las pantallas y componentes de la UI solo deben consumir la lógica de negocio y datos a través de `lib/api.ts`. No acceder a fuentes o cálculos internos directamente desde las vistas.
 
-## Learn More
+Para mayor detalle de la arquitectura, decisiones de modelado y diseño, consulta [docs/README.md](docs/README.md).
 
-To learn more about Next.js, take a look at the following resources:
+## Flujo de Trabajo y Colaboración (Git)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Actualizar la base**:
+   ```bash
+   git checkout develop && git pull origin develop
+   ```
+2. **Crear rama de trabajo**:
+   ```bash
+   git checkout -b feature/nombre-tarea
+   # También ramas fix/nombre-arreglo o docs/nombre-documento
+   ```
+3. **Commits semánticos** (Conventional Commits en español):
+   - `feat(...)`, `fix(...)`, `docs(...)`, `chore(...)`, `refactor(...)`
+4. **Subir rama y abrir Pull Request**:
+   Subir los cambios a GitHub y crear un Pull Request hacia la rama `develop`.
+5. **Revisión por pares**:
+   El compañero revisa el código, se resuelven comentarios y se fusiona mediante **Squash and Merge**. Posteriormente se elimina la rama secundaria.
+6. **Paso a producción**:
+   `develop` se fusiona hacia `main` únicamente mediante PR para entregas y versiones estables.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Aviso de Privacidad y Seguridad
 
-## Deploy on Vercel
+- **Archivos confidenciales**: No se deben subir bajo ninguna circunstancia archivos del histórico de Surtigas (`*.xlsx`, `*.xls`, `*.csv`, `*.pkl`) ni datos personales sensibles de clientes o asesores.
+- Los datasets incorporados en el código corresponden a promedios consolidados y anónimos.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Pendientes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [ ] Generar `.env.example` y configurar variables de entorno una vez se integre la base de datos PostgreSQL.
