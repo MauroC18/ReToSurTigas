@@ -48,20 +48,29 @@ function Fila({
           </span>
         ))}
       </td>
-      {dif.map((d, i) => (
-        <td key={i}>
-          {d < 0 ? (
-            <div className="celda mal">
-              Falta {-d}
-              <small>{esperaCelda(esperas[i]!)}</small>
-            </div>
-          ) : d > 0 ? (
-            <div className="celda sobra">Sobra {d}</div>
-          ) : (
-            <div className="celda justo">Justo</div>
-          )}
-        </td>
-      ))}
+       {dif.map((d, i) => {
+        const hereda = d >= 0 && esperas[i]! > meta;
+        return (
+          <td key={i}>
+            {d < 0 ? (
+              <div className="celda mal">
+                Falta {-d}
+                <small>{esperaCelda(esperas[i]!)}</small>
+              </div>
+            ) : d > 0 ? (
+              <div className="celda sobra">
+                Sobra {d}
+                {hereda && <small>Con fila de antes · {esperaCelda(esperas[i]!)}</small>}
+              </div>
+            ) : (
+              <div className="celda justo">
+                Justo
+                {hereda && <small>Con fila de antes · {esperaCelda(esperas[i]!)}</small>}
+              </div>
+            )}
+          </td>
+        );
+      })}
       <td>
         {conAccion && tieneSugerencia && (
           <Link href="/alertas" className="enlace">
@@ -118,10 +127,10 @@ export default async function MallaSugerida() {
       <Encabezado
         titulo="Malla sugerida para hoy"
         sub={`Qué oficinas necesitan más o menos personas, hora por hora · ${FECHA_LARGA}`}
-        accion={
-          <button type="button" className="btn btn-secundario">
+         accion={
+          <a href="/malla/exportar" className="btn btn-secundario" download>
             Exportar a Excel
-          </button>
+          </a>
         }
       />
 
@@ -146,7 +155,8 @@ export default async function MallaSugerida() {
       </section>
       <p className="chico" style={{ marginBottom: 14 }}>
         Se necesitan las personas que hagan falta para que un cliente espere máximo {meta} minutos, según las llegadas por
-        hora y el tiempo de atención de Digiturno.
+        hora y el tiempo de atención de Digiturno. &quot;Con fila de antes&quot; significa que hay personas suficientes para
+        esa franja, pero la fila de horas anteriores todavía no se acaba.
       </p>
 
       <section className="card tabla-scroll" style={{ padding: 0 }}>
