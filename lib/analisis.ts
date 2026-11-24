@@ -2,14 +2,14 @@ import { FECHA_HOY, FRANJAS, HORA_INICIO } from "./datos";
 import { esperasPorHora, necesariosPorHora } from "./colas";
 import type { Estado, Franja, Modalidad, Oficina, Sugerencia } from "./tipos";
 
-/* Cálculos por oficina */
+/* ---------- Cálculos por oficina ---------- */
 
 /** Franja → posiciones (0 a 9) de sus horas dentro de los arreglos por hora. */
 function horasDeFranja(f: Franja): [number, number] {
   return [f.inicio - HORA_INICIO, f.fin - HORA_INICIO];
 }
 
-/** Espera estimada en cada una de las 5 franjas . */
+/** Espera estimada en cada una de las 5 franjas (la peor hora de cada una). */
 export function esperasPorFranja(o: Oficina, hay: number | number[] = o.hay): number[] {
   const porHora = esperasPorHora(o.llegadas, o.s, hay);
   return FRANJAS.map((f) => {
@@ -61,7 +61,7 @@ export function oficinasFueraDeMeta(oficinas: Oficina[], meta: number): Oficina[
   return ordenarPorEspera(oficinas, meta).filter((o) => estaFueraDeMeta(o, meta));
 }
 
-/* Personal */
+/* ---------- Personal ---------- */
 
 export function presentes(oficinas: Oficina[]): number {
   return oficinas.reduce((total, o) => total + o.hay, 0);
@@ -71,7 +71,7 @@ export function totalColaboradores(estado: Pick<Estado, "oficinas" | "ausencias"
   return presentes(estado.oficinas) + estado.ausencias.length;
 }
 
-/* Textos */
+/* ---------- Textos ---------- */
 
 /** "A", "A y B", "A, B y C" */
 export function unir(items: string[]): string {
@@ -91,12 +91,14 @@ function meridiano(h: number): string {
   return h < 12 ? "a. m." : "p. m.";
 }
 
+/** "de 9:00 a 11:00 a. m." o "de 11:00 a. m. a 1:00 p. m." */
 export function rangoEnTexto(inicio: number, fin: number): string {
   return meridiano(inicio) === meridiano(fin)
     ? `de ${hora(inicio)} a ${hora(fin)} ${meridiano(fin)}`
     : `de ${hora(inicio)} ${meridiano(inicio)} a ${hora(fin)} ${meridiano(fin)}`;
 }
 
+/** "7:00 – 9:00 a. m." o "11:00 a. m. – 1:00 p. m." */
 export function rangoCorto(inicio: number, fin: number): string {
   return meridiano(inicio) === meridiano(fin)
     ? `${hora(inicio)} – ${hora(fin)} ${meridiano(fin)}`
@@ -107,6 +109,7 @@ export function rangoFranja(f: Franja): string {
   return rangoCorto(f.inicio, f.fin);
 }
 
+/** Junta franjas seguidas: [1, 3] → "de 9:00 a 11:00 a. m. y de 1:00 a 3:00 p. m." */
 export function textoFranjas(indices: number[]): string {
   const ordenados = [...new Set(indices)].sort((a, b) => a - b);
   const grupos: number[][] = [];
@@ -123,12 +126,14 @@ export function textoFranjas(indices: number[]): string {
   return unir(textos);
 }
 
+/** Espera dentro de una frase: "26 min", "más de 60 min". */
 export function esperaEnFrase(w: number): string {
   if (!Number.isFinite(w) || w > 60) return "más de 60 min";
   if (w < 1) return "menos de 1 min";
   return `${Math.round(w)} min`;
 }
 
+/** El mensaje rojo de arriba del Panel. */
 export function resumenPanel(oficinas: Oficina[], meta: number): string {
   const fuera = oficinasFueraDeMeta(oficinas, meta);
   if (fuera.length === 0) {
@@ -150,14 +155,20 @@ export function resumenPanel(oficinas: Oficina[], meta: number): string {
   );
 }
 
-/* Malla */
+/* ---------- Malla ---------- */
 
+/** Personas que hay menos las necesarias, por franja. Negativo = falta, positivo = sobra. */
 export function diferenciaPorFranja(o: Oficina, meta: number): number[] {
   return necesariosPorFranja(o, meta).map((n) => o.hay - n);
 }
 
 export type GrupoMalla = "ayuda" | "apoyo" | "bien";
 
+/**
+ * ayuda: le falta gente en alguna franja
+ * apoyo: le sobra gente en todas las franjas (puede ayudar a otras)
+ * bien:  el resto
+ */
 export function clasificarMalla(o: Oficina, meta: number): GrupoMalla {
   const dif = diferenciaPorFranja(o, meta);
   if (dif.some((d) => d < 0)) return "ayuda";
@@ -172,6 +183,7 @@ export function agruparMalla(oficinas: Oficina[], meta: number) {
   return { ayuda, apoyo, bien };
 }
 
+/** El resumen de arriba de la Malla. */
 export function resumenMalla(oficinas: Oficina[], meta: number): string {
   const { ayuda, apoyo } = agruparMalla(oficinas, meta);
   const partes: string[] = [];
@@ -209,7 +221,7 @@ export function resumenMalla(oficinas: Oficina[], meta: number): string {
   return partes.join(" ");
 }
 
-/* ¿Qué pasa si…? */
+/* ---------- ¿Qué pasa si…? ---------- */
 
 export function buscarOficina(oficinas: Oficina[], id: string): Oficina {
   const o = oficinas.find((x) => x.id === id);
@@ -236,30 +248,33 @@ export type Simulacion = {
   origen: LadoSimulacion;
   personas: number;
   modalidad: Modalidad;
+  /** El origen se quedaría sin ninguna persona. */
   origenSinPersonal: boolean;
 };
 
-function lado(o: Oficina, cambio: number, franjasIds: string[], soloDesdePrimera: boolean): LadoSimulacion {
+function lado(o: Oficina, cambio: number, franjasIds: string[], soloElegidas: boolean): LadoSimulacion {
   const hayDespues = o.hay + cambio;
+  // Personas por hora: el cambio solo cuenta en las franjas elegidas.
   const hayPorHora = o.llegadas.map((_, i) => {
     const enFranja = FRANJAS.some((f) => franjasIds.includes(f.id) && i >= f.inicio - HORA_INICIO && i < f.fin - HORA_INICIO);
     return enFranja ? hayDespues : o.hay;
   });
   const esperasAntes = esperasPorFranja(o);
   const esperasDespues = esperasPorFranja(o, hayPorHora);
-  const primera = FRANJAS.findIndex((f) => franjasIds.includes(f.id));
-  const desde = soloDesdePrimera && primera > 0 ? primera : 0;
+  // Destino: solo las franjas donde llega el apoyo. Origen: todo el día, para no dejarlo mal en ninguna.
+  const vistas = FRANJAS.map((_, i) => i).filter((i) => !soloElegidas || franjasIds.includes(FRANJAS[i]!.id));
   return {
     oficina: o,
     hayAntes: o.hay,
     hayDespues,
     esperasAntes,
     esperasDespues,
-    maxAntes: Math.max(...esperasAntes.slice(desde)),
-    maxDespues: Math.max(...esperasDespues.slice(desde)),
+    maxAntes: Math.max(...vistas.map((i) => esperasAntes[i]!)),
+    maxDespues: Math.max(...vistas.map((i) => esperasDespues[i]!)),
   };
 }
 
+/** Simula mover `personas` desde el origen hacia el destino, solo en las franjas elegidas. */
 export function simularMovimiento(
   oficinas: Oficina[],
   meta: number,
@@ -281,34 +296,42 @@ export function simularMovimiento(
   return { veredicto, destino, origen, personas, modalidad, origenSinPersonal };
 }
 
-/* Sugerencias */
+/* ---------- Sugerencias ---------- */
 
 export type DetalleSugerencia = {
   sugerencia: Sugerencia;
   origen: Oficina;
   destino: Oficina;
+  /** Espera máxima actual del destino. */
   esperaDestinoAntes: number;
+  /** Peor espera del destino en todo el día (sin el apoyo) */
+  esperaDestinoDia: number;
+  /** Espera máxima del destino con las personas movidas. */
   esperaDestinoDespues: number;
+  /** Espera máxima del origen con menos personas. */
   esperaOrigenDespues: number;
   origenDentroDeMeta: boolean;
   destinoFueraDeMeta: boolean;
+  /** Cuántas personas le sobran hoy al origen. */
   sobraOrigen: number;
+  /** Franjas (0 a 4) en que el destino pasa la meta. */
   franjasProblema: number[];
 };
 
 export function detalleSugerencia(oficinas: Oficina[], meta: number, s: Sugerencia): DetalleSugerencia {
   const origen = buscarOficina(oficinas, s.origenId);
   const destino = buscarOficina(oficinas, s.destinoId);
+  const sim = simularMovimiento(oficinas, meta, s.origenId, s.destinoId, s.personas, s.modalidad, s.franjas);
   const esperasDestino = esperasPorFranja(destino);
-  const esperaOrigenDespues = esperaMax(origen, origen.hay - s.personas);
   return {
     sugerencia: s,
     origen,
     destino,
-    esperaDestinoAntes: Math.max(...esperasDestino),
-    esperaDestinoDespues: esperaMax(destino, destino.hay + s.personas),
-    esperaOrigenDespues,
-    origenDentroDeMeta: origen.hay - s.personas >= 1 && esperaOrigenDespues <= meta,
+    esperaDestinoAntes: sim.destino.maxAntes,
+    esperaDestinoDia: Math.max(...esperasDestino),
+    esperaDestinoDespues: sim.destino.maxDespues,
+    esperaOrigenDespues: sim.origen.maxDespues,
+    origenDentroDeMeta: !sim.origenSinPersonal && sim.origen.maxDespues <= meta,
     destinoFueraDeMeta: Math.max(...esperasDestino) > meta,
     sobraOrigen: Math.max(0, origen.hay - necesariosMax(origen, meta)),
     franjasProblema: esperasDestino.flatMap((e, i) => (e > meta ? [i] : [])),
@@ -319,10 +342,11 @@ export function contarPendientes(sugerencias: Sugerencia[]): number {
   return sugerencias.filter((s) => s.estado === "pendiente").length;
 }
 
-/* Fechas */
+/* ---------- Fechas ---------- */
 
 const MESES = ["ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sep.", "oct.", "nov.", "dic."];
 
+/** "Solo hoy, 16 oct.", "16 – 18 oct." */
 export function etiquetaFechas(desde: string, hasta: string): string {
   const [, m1, d1] = desde.split("-").map(Number);
   const [, m2, d2] = hasta.split("-").map(Number);
@@ -332,4 +356,51 @@ export function etiquetaFechas(desde: string, hasta: string): string {
   }
   if (m1 === m2) return `${d1} – ${d2} ${MESES[m2 - 1]}`;
   return `${d1} ${MESES[m1 - 1]} – ${d2} ${MESES[m2 - 1]}`;
+}
+
+/* ---------- Apoyos aprobados ---------- */
+
+/** Personas por hora de una oficina, sumando o restando los apoyos APROBADOS. */
+export function personalPorHora(o: Oficina, sugerencias: Sugerencia[]): number[] {
+  return o.llegadas.map((_, i) => {
+    let n = o.hay;
+    for (const s of sugerencias) {
+      if (s.estado !== "aprobada") continue;
+      const activa = FRANJAS.some(
+        (f) => s.franjas.includes(f.id) && i >= f.inicio - HORA_INICIO && i < f.fin - HORA_INICIO,
+      );
+      if (!activa) continue;
+      if (s.destinoId === o.id) n += s.personas;
+      if (s.origenId === o.id) n -= s.personas;
+    }
+    return n;
+  });
+}
+
+/** Espera por franja contando los apoyos aprobados (igual que esperasPorFranja si no hay ninguno). */
+export function esperasConApoyos(o: Oficina, sugerencias: Sugerencia[]): number[] {
+  return esperasPorFranja(o, personalPorHora(o, sugerencias));
+}
+
+/** Personas que sobran (+) o faltan (−) en cada franja, contando los apoyos aprobados. */
+export function diferenciaConApoyos(o: Oficina, meta: number, sugerencias: Sugerencia[]): number[] {
+  const porHora = personalPorHora(o, sugerencias);
+  return necesariosPorFranja(o, meta).map((n, fi) => {
+    const f = FRANJAS[fi]!;
+    return porHora[f.inicio - HORA_INICIO]! - n;
+  });
+}
+
+/** Textos cortos para mostrar al lado de la oficina, por ejemplo "+1 de Corozal (7 a. m. – 9 a. m.)". */
+export function etiquetasApoyo(o: Oficina, oficinas: Oficina[], sugerencias: Sugerencia[]): string[] {
+  const nombre = (id: string) => oficinas.find((x) => x.id === id)?.nombre ?? id;
+  const cuando = (s: Sugerencia) =>
+    s.franjas.map((id) => rangoFranja(FRANJAS.find((f) => f.id === id)!)).join(" y ");
+  const etiquetas: string[] = [];
+  for (const s of sugerencias) {
+    if (s.estado !== "aprobada") continue;
+    if (s.destinoId === o.id) etiquetas.push(`+${s.personas} de ${nombre(s.origenId)} (${cuando(s)})`);
+    if (s.origenId === o.id) etiquetas.push(`−${s.personas} hacia ${nombre(s.destinoId)} (${cuando(s)})`);
+  }
+  return etiquetas;
 }

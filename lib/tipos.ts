@@ -29,6 +29,7 @@ export type Sugerencia = {
   destinoId: string;
   personas: number;
   modalidad: Modalidad;
+  franjas: string[];
   estado: EstadoSugerencia;
 };
 

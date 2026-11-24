@@ -2,8 +2,9 @@ import Link from "next/link";
 import { FECHA_LARGA, FRANJAS } from "@/lib/datos";
 import {
   agruparMalla,
-  diferenciaPorFranja,
-  esperasPorFranja,
+  diferenciaConApoyos,
+  esperasConApoyos,
+  etiquetasApoyo,
   necesariosMax,
   rangoFranja,
   resumenMalla,
@@ -11,15 +12,29 @@ import {
 import { formatoEspera } from "@/lib/erlang";
 import { obtenerEstado } from "@/lib/api";
 import { Encabezado, Pildora } from "@/components/ui";
-import type { Oficina } from "@/lib/tipos";
+import type { Oficina, Sugerencia } from "@/lib/tipos";
 
 function esperaCelda(w: number): string {
   return Number.isFinite(w) && w <= 60 ? `Espera ≈ ${formatoEspera(w)}` : "Espera: más de 60 min";
 }
 
-function Fila({ o, meta, conAccion }: { o: Oficina; meta: number; conAccion: boolean }) {
-  const dif = diferenciaPorFranja(o, meta);
-  const esperas = esperasPorFranja(o);
+function Fila({
+  o,
+  oficinas,
+  sugerencias,
+  meta,
+  conAccion,
+}: {
+  o: Oficina;
+  oficinas: Oficina[];
+  sugerencias: Sugerencia[];
+  meta: number;
+  conAccion: boolean;
+}) {
+  const dif = diferenciaConApoyos(o, meta, sugerencias);
+  const esperas = esperasConApoyos(o, sugerencias);
+  const etiquetas = etiquetasApoyo(o, oficinas, sugerencias);
+  const tieneSugerencia = sugerencias.some((s) => s.destinoId === o.id);
   return (
     <tr className="oficina-fila">
       <td>
@@ -27,6 +42,11 @@ function Fila({ o, meta, conAccion }: { o: Oficina; meta: number; conAccion: boo
         <span className="chico">
           Hay {o.hay} · Se necesitan hasta {necesariosMax(o, meta)}
         </span>
+        {etiquetas.map((t) => (
+          <span key={t} className="chico" style={{ display: "block" }}>
+            {t}
+          </span>
+        ))}
       </td>
       {dif.map((d, i) => (
         <td key={i}>
@@ -43,7 +63,7 @@ function Fila({ o, meta, conAccion }: { o: Oficina; meta: number; conAccion: boo
         </td>
       ))}
       <td>
-        {conAccion && (
+        {conAccion && tieneSugerencia && (
           <Link href="/alertas" className="enlace">
             Ver sugerencia
           </Link>
@@ -57,12 +77,16 @@ function Grupo({
   titulo,
   nota,
   oficinas,
+  todas,
+  sugerencias,
   meta,
   conAccion,
 }: {
   titulo: string;
   nota: string;
   oficinas: Oficina[];
+  todas: Oficina[];
+  sugerencias: Sugerencia[];
   meta: number;
   conAccion: boolean;
 }) {
@@ -79,14 +103,14 @@ function Grupo({
         </td>
       </tr>
       {oficinas.map((o) => (
-        <Fila key={o.id} o={o} meta={meta} conAccion={conAccion} />
+        <Fila key={o.id} o={o} oficinas={todas} sugerencias={sugerencias} meta={meta} conAccion={conAccion} />
       ))}
     </>
   );
 }
 
 export default async function MallaSugerida() {
-  const { oficinas, meta } = await obtenerEstado();
+  const { oficinas, meta, sugerencias } = await obtenerEstado();
   const { ayuda, apoyo, bien } = agruparMalla(oficinas, meta);
 
   return (
@@ -144,8 +168,10 @@ export default async function MallaSugerida() {
             {ayuda.length > 0 && (
               <Grupo
                 titulo="Necesitan ayuda"
-                nota="Hay menos personas de las necesarias en la hora pico"
+                nota="Hay menos personas de las necesarias en alguna franja"
                 oficinas={ayuda}
+                todas={oficinas}
+                sugerencias={sugerencias}
                 meta={meta}
                 conAccion
               />
@@ -155,6 +181,8 @@ export default async function MallaSugerida() {
                 titulo="Pueden ayudar todo el día"
                 nota="Tienen más personas de las necesarias"
                 oficinas={apoyo}
+                todas={oficinas}
+                sugerencias={sugerencias}
                 meta={meta}
                 conAccion={false}
               />
@@ -164,6 +192,8 @@ export default async function MallaSugerida() {
                 titulo="Sin problemas"
                 nota="Tienen justo lo necesario, con algo de sobrante en las horas tranquilas"
                 oficinas={bien}
+                todas={oficinas}
+                sugerencias={sugerencias}
                 meta={meta}
                 conAccion={false}
               />

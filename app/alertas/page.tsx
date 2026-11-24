@@ -5,6 +5,7 @@ import {
   detalleSugerencia,
   esperaEnFrase,
   rangoCorto,
+  rangoFranja,
   textoFranjas,
 } from "@/lib/analisis";
 import { obtenerEstado } from "@/lib/api";
@@ -55,8 +56,17 @@ export default async function Alertas() {
 
       <div className="dos-col">
         <div className="col-pila">
+          {detalles.length === 0 && (
+            <section className="card">
+              <h2>Sin sugerencias por ahora</h2>
+              <p className="sub">
+                Con el personal de hoy ninguna oficina tiene holgura para apoyar a otra en las franjas con fila.
+              </p>
+            </section>
+          )}
           {detalles.map((d) => {
             const s = d.sugerencia;
+            const cuando = s.franjas.map((id) => rangoFranja(FRANJAS.find((f) => f.id === id)!)).join(" y ");
             return (
               <article key={s.id} className="card" aria-labelledby={`sug-${s.id}`}>
                 <div className="alerta-titulo">
@@ -69,7 +79,7 @@ export default async function Alertas() {
                 </div>
                 <p className="sug-texto" style={{ marginTop: 8 }}>
                   {d.destinoFueraDeMeta
-                    ? `Se estima una espera de hasta ${esperaEnFrase(d.esperaDestinoAntes)} ${textoFranjas(d.franjasProblema)} La meta es ${meta} min.`
+                    ? `Se estima una espera de hasta ${esperaEnFrase(d.esperaDestinoDia)} ${textoFranjas(d.franjasProblema)} La meta es ${meta} min.`
                     : `Con el personal de hoy la espera estimada queda dentro de la meta de ${meta} min.`}
                 </p>
 
@@ -77,11 +87,17 @@ export default async function Alertas() {
                   <div className="etiqueta">Sugerencia</div>
                   <div className="accion">
                     Mover {s.personas} {s.personas === 1 ? "persona" : "personas"} desde {d.origen.nombre}{" "}
-                    {s.modalidad === "virtual" ? "(apoyo virtual, sin viajar)" : "(presencial)"}
+                    {s.modalidad === "virtual" ? "(apoyo virtual, sin viajar)" : "(presencial)"} en {cuando}
                   </div>
                   <p className="verde">
-                    La espera bajaría de {esperaEnFrase(d.esperaDestinoAntes)} a {esperaEnFrase(d.esperaDestinoDespues)}.
+                    En esa franja la espera bajaría de {esperaEnFrase(d.esperaDestinoAntes)} a{" "}
+                    {esperaEnFrase(d.esperaDestinoDespues)}.
                   </p>
+                  {d.esperaDestinoDespues > meta && (
+                    <p className="chico" style={{ marginTop: 4 }}>
+                      Mejora, pero sigue por encima de la meta de {meta} min: hace falta más personal en esa franja.
+                    </p>
+                  )}
                   <p className="chico" style={{ marginTop: 4 }}>
                     {d.origen.nombre} quedaría con una espera de {esperaEnFrase(d.esperaOrigenDespues)},{" "}
                     {d.origenDentroDeMeta ? "dentro de la meta." : "fuera de la meta."}

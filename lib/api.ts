@@ -1,10 +1,17 @@
 import { escribirEstado, leerEstado } from "./store";
+import { proponerApoyos } from "./motor";
 import { TIPOS_AUSENCIA, type Estado, type EstadoSugerencia, type NuevaAusencia } from "./tipos";
 
 /**
  * Hoy lee y escribe en el estado en memoria. Cuando exista el servicio de
  * turnos con Postgres, solo se cambia este archivo y las pantallas no se tocan.
  */
+
+/** Recalcula las sugerencias y conserva las decisiones ya tomadas. */
+function recalcularSugerencias(e: Estado): void {
+  const decididas = new Map(e.sugerencias.filter((s) => s.estado !== "pendiente").map((s) => [s.id, s.estado]));
+  e.sugerencias = proponerApoyos(e.oficinas, e.meta).map((s) => ({ ...s, estado: decididas.get(s.id) ?? "pendiente" }));
+}
 
 export async function obtenerEstado(): Promise<Estado> {
   return structuredClone(leerEstado());
@@ -40,6 +47,7 @@ export async function registrarAusencia(datos: NuevaAusencia): Promise<Resultado
     }
     oficina.hay -= 1;
     e.ausencias.push({ id: `a${Date.now()}`, ...datos, colaborador });
+    recalcularSugerencias(e);
   });
   return resultado;
 }
@@ -51,6 +59,7 @@ export async function actualizarMeta(meta: number): Promise<{ ok: true } | { ok:
   }
   escribirEstado((e) => {
     e.meta = meta;
+    recalcularSugerencias(e);
   });
   return { ok: true };
 }
