@@ -2,8 +2,8 @@ import { EFICIENCIA, FACTOR_HORA } from "./datos";
 
 export function esperasPorHora(llegadas: number[], s: number, hay: number | number[]): number[] {
   const hayEn = (i: number) => (Array.isArray(hay) ? (hay[i] ?? 0) : hay);
-  const porPersona = 60 / s; // clientes que atiende una persona en una hora
-  let fila = 0; // clientes en espera al empezar la hora
+  const porPersona = 60 / s; 
+  let fila = 0; 
   return llegadas.map((lleg, i) => {
     const capacidad = porPersona * hayEn(i) * (FACTOR_HORA[i] ?? 1) * EFICIENCIA;
     if (capacidad <= 0) {
@@ -31,4 +31,10 @@ export function necesariosPorHora(llegadas: number[], s: number, meta: number): 
     fila = Math.max(0, fila + lleg - porPersona * personas * EFICIENCIA);
     return personas;
   });
+}
+
+/** Clientes que se pueden atender en cada hora, con las personas indicadas. */
+export function capacidadPorHora(s: number, hay: number | number[]): number[] {
+  const porPersona = 60 / s;
+  return FACTOR_HORA.map((f, i) => porPersona * (Array.isArray(hay) ? (hay[i] ?? 0) : hay) * f * EFICIENCIA);
 }

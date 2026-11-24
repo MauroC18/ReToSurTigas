@@ -1,13 +1,15 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { FRANJAS } from "@/lib/datos";
 import { esperaEnFrase, rangoFranja, simularMovimiento, type LadoSimulacion } from "@/lib/analisis";
+import { crearSugerenciaAction } from "@/lib/actionssugerencias";
 import { formatoEspera } from "@/lib/erlang";
 import type { Modalidad, Oficina } from "@/lib/tipos";
 import { Pildora } from "./ui";
 
+// Oficinas que más espera tienen (reciben ayuda) y oficinas con holgura en algunas franjas (la dan).
 const DESTINOS = ["cartagena", "monteria", "turbaco", "tolu", "carmen-de-bolivar", "mompox", "lorica"];
 const ORIGENES = ["sincelejo", "cerete", "corozal", "sahagun", "magangue", "cartagena"];
 
@@ -90,12 +92,14 @@ function TablaLado({ lado, rol, meta }: { lado: LadoSimulacion; rol: "recibe" | 
 }
 
 export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: number }) {
+  const router = useRouter();
   const [destino, setDestino] = useState("monteria");
   const [origen, setOrigen] = useState("sincelejo");
   const [personas, setPersonas] = useState(1);
   const [modalidad, setModalidad] = useState<Modalidad>("presencial");
-
   const [franjas, setFranjas] = useState<string[]>(["F4"]);
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, iniciar] = useTransition();
 
   // Marca o desmarca una franja; siempre queda al menos una.
   const alternarFranja = (id: string) =>
@@ -104,6 +108,7 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
     );
 
   const nombre = (id: string) => oficinas.find((o) => o.id === id)?.nombre ?? id;
+  const mismaOficina = origen === destino;
 
   // Se recalcula solo cuando cambia alguna elección.
   const sim = useMemo(
@@ -113,6 +118,18 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
 
   const dNombre = sim.destino.oficina.nombre;
   const oNombre = sim.origen.oficina.nombre;
+
+  function enviar() {
+    setError(null);
+    iniciar(async () => {
+      const resultado = await crearSugerenciaAction({ origenId: origen, destinoId: destino, personas, modalidad, franjas });
+      if (!resultado.ok) {
+        setError(resultado.error);
+        return;
+      }
+      router.push("/alertas");
+    });
+  }
 
   return (
     <div className="dos-col">
@@ -149,7 +166,6 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
             </button>
           </div>
         </div>
-
         <div className="paso">
           <h3>4. ¿En qué franjas?</h3>
           <div className="chips" role="group" aria-label="Franjas de apoyo">
@@ -166,7 +182,6 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
             ))}
           </div>
         </div>
-
         <div className="paso">
           <h3>5. ¿Cómo atiende?</h3>
           <Chips
@@ -185,7 +200,13 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
       </section>
 
       <div className="col-pila" aria-live="polite">
-        {sim.veredicto === "no-recomendado" && (
+        {mismaOficina && (
+          <div className="veredicto no">
+            <h2>Elige dos oficinas distintas</h2>
+            <p>El origen y el destino son la misma oficina.</p>
+          </div>
+        )}
+        {!mismaOficina && sim.veredicto === "no-recomendado" && (
           <div className="veredicto no">
             <h2>No recomendado</h2>
             <p>
@@ -196,7 +217,7 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
             </p>
           </div>
         )}
-        {sim.veredicto === "mejora-no-alcanza" && (
+        {!mismaOficina && sim.veredicto === "mejora-no-alcanza" && (
           <div className="veredicto medio">
             <h2>Mejora, pero no alcanza</h2>
             <p>
@@ -205,7 +226,7 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
             </p>
           </div>
         )}
-        {sim.veredicto === "buena-idea" && (
+        {!mismaOficina && sim.veredicto === "buena-idea" && (
           <div className="veredicto si">
             <h2>Buena idea</h2>
             <p>
@@ -220,12 +241,19 @@ export function Simulador({ oficinas, meta }: { oficinas: Oficina[]; meta: numbe
         <TablaLado lado={sim.origen} rol="entrega" meta={meta} />
 
         <div>
-          <Link href="/alertas" className="btn btn-primario">
-            Enviar a aprobación
-          </Link>
-          <p className="chico" style={{ marginTop: 10 }}>
-            Cálculo de ejemplo con los datos de Digiturno de los últimos viernes.
-          </p>
+          <button
+            type="button"
+            className="btn btn-primario"
+            disabled={enviando || mismaOficina || sim.veredicto === "no-recomendado"}
+            onClick={enviar}
+          >
+            {enviando ? "Enviando…" : "Enviar a aprobación"}
+          </button>
+          {error && (
+            <p className="mal-texto" role="alert" style={{ marginTop: 10 }}>
+              {error}
+            </p>
+          )}
         </div>
       </div>
     </div>

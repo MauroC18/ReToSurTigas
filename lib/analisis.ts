@@ -1,5 +1,5 @@
 import { FECHA_HOY, FRANJAS, HORA_INICIO } from "./datos";
-import { esperasPorHora, necesariosPorHora } from "./colas";
+import { capacidadPorHora, esperasPorHora, necesariosPorHora } from "./colas";
 import type { Estado, Franja, Modalidad, Oficina, Sugerencia } from "./tipos";
 
 /* ---------- Cálculos por oficina ---------- */
@@ -403,4 +403,30 @@ export function etiquetasApoyo(o: Oficina, oficinas: Oficina[], sugerencias: Sug
     if (s.origenId === o.id) etiquetas.push(`−${s.personas} hacia ${nombre(s.destinoId)} (${cuando(s)})`);
   }
   return etiquetas;
+}
+
+/* ---------- Datos para la gráfica de llegadas ---------- */
+
+export type SerieOficina = {
+  id: string;
+  nombre: string;
+  /** Clientes que llegan por hora, de 7:00 a 16:00 */
+  llegadas: number[];
+  /** Clientes que se pueden atender por hora, con los apoyos aprobados */
+  capacidad: number[];
+  /** Espera estimada al final de cada hora, en minutos (999 si no hay nadie atendiendo) */
+  esperas: number[];
+};
+
+export function seriesPorOficina(oficinas: Oficina[], sugerencias: Sugerencia[]): SerieOficina[] {
+  return oficinas.map((o) => {
+    const personal = personalPorHora(o, sugerencias);
+    return {
+      id: o.id,
+      nombre: o.nombre,
+      llegadas: o.llegadas,
+      capacidad: capacidadPorHora(o.s, personal),
+      esperas: esperasPorHora(o.llegadas, o.s, personal).map((w) => (Number.isFinite(w) ? w : 999)),
+    };
+  });
 }

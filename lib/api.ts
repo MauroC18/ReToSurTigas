@@ -1,24 +1,31 @@
 import { escribirEstado, leerEstado } from "./store";
+import { FRANJAS } from "./datos";
+import { simularMovimiento } from "./analisis";
 import { proponerApoyos } from "./motor";
-import { TIPOS_AUSENCIA, type Estado, type EstadoSugerencia, type NuevaAusencia } from "./tipos";
+import { TIPOS_AUSENCIA, type Estado, type EstadoSugerencia, type Modalidad, type NuevaAusencia } from "./tipos";
 
 /**
  * Hoy lee y escribe en el estado en memoria. Cuando exista el servicio de
  * turnos con Postgres, solo se cambia este archivo y las pantallas no se tocan.
  */
 
-/** Recalcula las sugerencias y conserva las decisiones ya tomadas. */
+/**
+ * Recalcula las sugerencias del motor y conserva las decisiones ya tomadas.
+ * Las que se enviaron a mano desde el simulador (id "manual-…") se dejan como están.
+ */
 function recalcularSugerencias(e: Estado): void {
   const decididas = new Map(e.sugerencias.filter((s) => s.estado !== "pendiente").map((s) => [s.id, s.estado]));
-  e.sugerencias = proponerApoyos(e.oficinas, e.meta).map((s) => ({ ...s, estado: decididas.get(s.id) ?? "pendiente" }));
+  const manuales = e.sugerencias.filter((s) => s.id.startsWith("manual-"));
+  const automaticas = proponerApoyos(e.oficinas, e.meta).map((s) => ({ ...s, estado: decididas.get(s.id) ?? ("pendiente" as const) }));
+  e.sugerencias = [...automaticas, ...manuales];
 }
 
 export async function obtenerEstado(): Promise<Estado> {
-  return structuredClone(leerEstado());
+  return structuredClone(await leerEstado());
 }
 
 export async function decidirSugerencia(id: string, estado: EstadoSugerencia): Promise<void> {
-  escribirEstado((e) => {
+  await escribirEstado((e) => {
     const s = e.sugerencias.find((x) => x.id === id);
     if (s) s.estado = estado;
   });
@@ -35,7 +42,7 @@ export async function registrarAusencia(datos: NuevaAusencia): Promise<Resultado
   if (datos.hasta < datos.desde) return { ok: false, error: "La fecha final no puede ser anterior a la inicial" };
 
   let resultado: ResultadoAusencia = { ok: true };
-  escribirEstado((e) => {
+  await escribirEstado((e) => {
     const oficina = e.oficinas.find((o) => o.id === datos.oficinaId);
     if (!oficina) {
       resultado = { ok: false, error: "Oficina no encontrada" };
@@ -57,7 +64,7 @@ export async function actualizarMeta(meta: number): Promise<{ ok: true } | { ok:
   if (!Number.isInteger(meta) || meta < 1 || meta > 60) {
     return { ok: false, error: "Escribe un número entero entre 1 y 60" };
   }
-  escribirEstado((e) => {
+  await escribirEstado((e) => {
     e.meta = meta;
     recalcularSugerencias(e);
   });
@@ -85,7 +92,7 @@ export async function aplicarImportacion(datos: DatosOficina[]): Promise<Resulta
   if (!validos) return { ok: false, error: "Los datos del archivo no son válidos" };
 
   let resultado: ResultadoImportacionAplicada = { ok: true, actualizadas: 0 };
-  escribirEstado((e) => {
+  await escribirEstado((e) => {
     if (datos.some((d) => !e.oficinas.some((o) => o.id === d.id))) {
       resultado = { ok: false, error: "El archivo trae una oficina que no existe" };
       return;
@@ -97,6 +104,45 @@ export async function aplicarImportacion(datos: DatosOficina[]): Promise<Resulta
     }
     recalcularSugerencias(e);
     resultado = { ok: true, actualizadas: datos.length };
+  });
+  return resultado;
+}
+
+export type DatosSugerenciaManual = {
+  origenId: string;
+  destinoId: string;
+  personas: number;
+  modalidad: Modalidad;
+  franjas: string[];
+};
+
+export type ResultadoSugerenciaManual = { ok: true; id: string } | { ok: false; error: string };
+
+/** Crea una sugerencia pendiente a partir de lo que se armó en el simulador. */
+export async function crearSugerenciaManual(datos: DatosSugerenciaManual): Promise<ResultadoSugerenciaManual> {
+  const { origenId, destinoId, personas, modalidad } = datos;
+  const franjas = FRANJAS.filter((f) => datos.franjas?.includes(f.id)).map((f) => f.id);
+  if (origenId === destinoId) return { ok: false, error: "Elige dos oficinas distintas" };
+  if (!Number.isInteger(personas) || personas < 1 || personas > 2) return { ok: false, error: "Elige 1 o 2 personas" };
+  if (modalidad !== "presencial" && modalidad !== "virtual") return { ok: false, error: "Elige cómo atiende" };
+  if (franjas.length === 0) return { ok: false, error: "Elige al menos una franja" };
+
+  let resultado: ResultadoSugerenciaManual = { ok: false, error: "No se pudo crear la sugerencia" };
+  await escribirEstado((e) => {
+    if (!e.oficinas.some((o) => o.id === origenId) || !e.oficinas.some((o) => o.id === destinoId)) {
+      resultado = { ok: false, error: "Oficina no encontrada" };
+      return;
+    }
+    const sim = simularMovimiento(e.oficinas, e.meta, origenId, destinoId, personas, modalidad, franjas);
+    if (sim.veredicto === "no-recomendado") {
+      resultado = { ok: false, error: "Esa opción no se recomienda: deja a la oficina de origen fuera de la meta" };
+      return;
+    }
+    const id = `manual-${origenId}-${destinoId}-${franjas.join("")}-${personas}-${modalidad}`;
+    if (!e.sugerencias.some((s) => s.id === id)) {
+      e.sugerencias.push({ id, origenId, destinoId, personas, modalidad, franjas, estado: "pendiente" });
+    }
+    resultado = { ok: true, id };
   });
   return resultado;
 }

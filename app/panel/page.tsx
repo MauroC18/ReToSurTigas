@@ -14,10 +14,13 @@ import {
   presentes,
   rangoEnTexto,
   resumenPanel,
+  seriesPorOficina,
   totalColaboradores,
 } from "@/lib/analisis";
 import { formatoEspera } from "@/lib/erlang";
 import { obtenerEstado } from "@/lib/api";
+import { AutoRefresco } from "@/components/autorefresco";
+import { GraficaLlegadas } from "@/components/graficallegadas";
 import { Encabezado, Pildora } from "@/components/ui";
 
 export default async function PanelDelDia() {
@@ -28,6 +31,7 @@ export default async function PanelDelDia() {
   const fuera = oficinasFueraDeMeta(oficinas, meta);
   const peor = ordenadas[0]!;
   const franjaPeor = FRANJAS[franjaMasCargada(peor)]!;
+  const series = seriesPorOficina(oficinas, sugerencias);
 
   return (
     <>
@@ -40,6 +44,10 @@ export default async function PanelDelDia() {
           </Link>
         }
       />
+
+      <div style={{ marginBottom: 14 }}>
+        <AutoRefresco segundos={30} />
+      </div>
 
       <section className="resumen" aria-labelledby="resumen-titulo">
         <h2 id="resumen-titulo">Lo más importante hoy</h2>
@@ -120,6 +128,9 @@ export default async function PanelDelDia() {
         <section className="card" aria-labelledby="sug-titulo">
           <h2 id="sug-titulo">Sugerencias para hoy</h2>
           <div style={{ marginTop: 8 }}>
+            {sugerencias.length === 0 && (
+              <p className="sug-texto">Con el personal de hoy no hay holgura para apoyar a otra oficina.</p>
+            )}
             {sugerencias.map((s) => {
               const d = detalleSugerencia(oficinas, meta, s);
               return (
@@ -136,8 +147,8 @@ export default async function PanelDelDia() {
                         {d.sobraOrigen > 0
                           ? `Hoy sobra ${d.sobraOrigen} ${plural(d.sobraOrigen, "persona", "personas")} en ${d.origen.nombre}. `
                           : `Hoy no sobra personal en ${d.origen.nombre}. `}
-                        En {d.destino.nombre} la espera en hora pico pasaría de {formatoEspera(d.esperaDestinoAntes)} a{" "}
-                        {formatoEspera(d.esperaDestinoDespues)}.
+                        En {d.destino.nombre}, en las franjas con apoyo, la espera pasaría de{" "}
+                        {formatoEspera(d.esperaDestinoAntes)} a {formatoEspera(d.esperaDestinoDespues)}.
                       </p>
                       <p className={d.origenDentroDeMeta ? "verde" : "rojo"}>
                         {d.origen.nombre} quedaría en {esperaEnFrase(d.esperaOrigenDespues)},{" "}
@@ -166,6 +177,17 @@ export default async function PanelDelDia() {
           </div>
         </section>
       </div>
+
+      <section className="card" aria-labelledby="grafica-titulo" style={{ marginTop: 20 }}>
+        <h2 id="grafica-titulo">Llegadas por hora</h2>
+        <p className="sub">
+          Cuántos clientes llegan en cada hora y cuántos se pueden atender con el personal de hoy, incluidos los apoyos
+          aprobados.
+        </p>
+        <div style={{ marginTop: 12 }}>
+          <GraficaLlegadas series={series} meta={meta} />
+        </div>
+      </section>
     </>
   );
 }
