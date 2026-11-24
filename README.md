@@ -1,69 +1,89 @@
-# ReToSurTigas - Sistema de Optimización y Gestión de Turnos
+# Más allá del turno · Surtigas
 
-Sistema inteligente para la predicción, dimensionamiento y gestión de turnos de atención al cliente en sedes de Surtigas.
-Permite analizar la demanda histórica, simular colas de espera con modelos matemáticos (Erlang-C), calcular dotaciones óptimas de asesores y evaluar escenarios de contingencia en tiempo real.
+Prototipo para automatizar la gestión de turnos y la redistribución de personal en las 14 oficinas de atención de Surtigas. Toma la demanda por hora (histórico de Digiturno), las ausencias y una meta de espera, y propone qué oficinas necesitan apoyo y cuáles pueden darlo. Una persona aprueba o rechaza cada sugerencia.
 
-## Requisitos e Instalación
+> Es un prototipo con datos agregados de mayo de 2026 y un estado en memoria. No está conectado todavía a Digiturno ni a una base de datos.
 
-- **Node.js**: >= 18.x
-- **Gestor de paquetes**: npm (o yarn/pnpm)
+## Cómo correrlo
+
+Requisitos: Node.js 20 o superior y npm.
 
 ```bash
-# Instalar dependencias
 npm install
-
-# Iniciar servidor de desarrollo local
-npm run dev
-
-# Verificar tipos y reglas de estilo
-npx tsc --noEmit
-npm run lint
-
-# Generar compilación para producción
-npm run build
+npm run dev      # http://localhost:3000
+npm run build    # compila para producción
+npm run lint     # revisa el código
+npx tsc --noEmit # revisa los tipos
 ```
 
-## Estructura de Carpetas
+Los cambios que hagas en la app (ausencias, decisiones, meta) viven en la memoria del servidor: se pierden al reiniciarlo.
 
-```text
-surtigas-turno/
-├── app/          # Rutas y páginas de la aplicación (Next.js App Router)
-├── components/   # Componentes de interfaz de usuario reutilizables
-├── lib/          # Lógica de negocio, modelos matemáticos (colas/Erlang) y datos
-├── docs/         # Documentación de arquitectura y decisiones de diseño
-├── public/       # Recursos estáticos
-└── .github/      # Plantillas y flujos de integración continua
+## Pantallas
+
+| Ruta | Qué hace |
+|---|---|
+| `/panel` | Resumen del día: oficinas fuera de la meta, espera más larga y sugerencias |
+| `/malla` | Faltantes y sobrantes por oficina y franja, con los apoyos aprobados. Exporta a CSV |
+| `/alertas` | Sugerencias del motor para aprobar, rechazar o deshacer |
+| `/que-pasa-si` | Simula mover personas entre oficinas en las franjas que se elijan |
+| `/ausencia` | Registra una ausencia; descuenta a la persona y recalcula las sugerencias |
+| `/datos` | Meta de espera y resumen de los datos de ejemplo |
+
+## Cómo calcula
+
+1. **Demanda:** llegadas promedio por hora y duración de la visita, por oficina (histórico de mayo de 2026).
+2. **Fila con arrastre (`lib/colas.ts`):** la fila de una hora se hereda a la siguiente. Capacidad por hora = (60 / minutos por visita) × personas × factor de la hora × eficiencia (0,85). Espera = fila promedio de la hora / capacidad.
+3. **Personas necesarias:** las que mantienen la espera por debajo de la meta en cada franja.
+4. **Motor de sugerencias (`lib/motor.ts`):** para cada franja, pone una persona de apoyo virtual de la oficina con holgura en la oficina con déficit. Solo deja las sugerencias que mejoran al destino y no dejan al origen fuera de la meta.
+5. **Apoyos aprobados:** solo las sugerencias aprobadas cambian la Malla y el Panel.
+
+### Límites del modelo (leer antes de presentarlo)
+
+- Se calibró y se midió con un solo mes (mayo de 2026), sin datos separados para validar. Con ese mes, la correlación a nivel de oficina fue de 0,86 con un error medio de unos 11 minutos, y tiende a subestimar la espera en las oficinas pequeñas.
+- El cálculo por hora aislado (Erlang C) no sirvió: no explicaba las esperas reales porque ignora la fila heredada. Por eso se usa el modelo con arrastre.
+- Con el personal actual, la meta de 10 minutos no se alcanza en horas pico. Por eso la meta inicial es 30 minutos y es editable en `/datos`.
+- Reasignar entre oficinas ayuda poco: los faltantes están en la mañana y casi ninguna oficina tiene holgura a esa hora. Se necesita más personal en horas pico.
+- El reto menciona 36 colaboradores; el histórico muestra unos 31 atendiendo a la vez. Hay que confirmarlo con Surtigas.
+- Faltan los horarios reales del personal, el tiempo de traslado entre oficinas (solo se sugiere apoyo virtual) y más meses de datos.
+
+## Estructura
+
+```
+app/            pantallas (Next.js App Router) y /malla/exportar (CSV)
+components/     piezas de interfaz
+lib/
+  api.ts        única puerta de entrada a los datos para las pantallas
+  actions.ts    acciones de servidor (formularios)
+  store.ts      estado en memoria (se cambiará por Postgres)
+  datos.ts      oficinas, franjas y constantes del modelo
+  colas.ts      fila con arrastre y personas necesarias por hora
+  analisis.ts   cálculos para las pantallas
+  motor.ts      motor de sugerencias
+  erlang.ts     fórmulas de Erlang C y formato de esperas
+  tipos.ts      tipos compartidos
+docs/           documentación de arquitectura y decisiones
 ```
 
-> **Regla de arquitectura**: Las pantallas y componentes de la UI solo deben consumir la lógica de negocio y datos a través de `lib/api.ts`. No acceder a fuentes o cálculos internos directamente desde las vistas.
+**Regla de arquitectura:** las pantallas y los componentes solo leen y escriben datos a través de `lib/api.ts`. Así, cuando entre Postgres, solo cambian `api.ts` y `store.ts`.
 
-Para mayor detalle de la arquitectura, decisiones de modelado y diseño, consulta [docs/README.md](docs/README.md).
+## Cómo trabajamos
 
-## Flujo de Trabajo y Colaboración (Git)
+- `main`: versión estable. No se hace commit directo.
+- `develop`: rama de integración.
+- `feature/…`, `fix/…`, `docs/…`: una rama por tarea, desde `develop`, con Pull Request hacia `develop` y revisión del compañero.
+- Commits en español con Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
+- Antes de cada commit: `npx tsc --noEmit`, `npm run lint` y `npm run build`.
 
-1. **Actualizar la base**:
-   ```bash
-   git checkout develop && git pull origin develop
-   ```
-2. **Crear rama de trabajo**:
-   ```bash
-   git checkout -b feature/nombre-tarea
-   # También ramas fix/nombre-arreglo o docs/nombre-documento
-   ```
-3. **Commits semánticos** (Conventional Commits en español):
-   - `feat(...)`, `fix(...)`, `docs(...)`, `chore(...)`, `refactor(...)`
-4. **Subir rama y abrir Pull Request**:
-   Subir los cambios a GitHub y crear un Pull Request hacia la rama `develop`.
-5. **Revisión por pares**:
-   El compañero revisa el código, se resuelven comentarios y se fusiona mediante **Squash and Merge**. Posteriormente se elimina la rama secundaria.
-6. **Paso a producción**:
-   `develop` se fusiona hacia `main` únicamente mediante PR para entregas y versiones estables.
+Más detalle en [CONTRIBUTING.md](CONTRIBUTING.md) y en [docs/README.md](docs/README.md).
 
-## Aviso de Privacidad y Seguridad
+## Privacidad de los datos
 
-- **Archivos confidenciales**: No se deben subir bajo ninguna circunstancia archivos del histórico de Surtigas (`*.xlsx`, `*.xls`, `*.csv`, `*.pkl`) ni datos personales sensibles de clientes o asesores.
-- Los datasets incorporados en el código corresponden a promedios consolidados y anónimos.
+El histórico original de Digiturno es privado y **no está en este repositorio** ni debe subirse (`*.xlsx`, `*.csv` y `.env*` están en `.gitignore`). Todo lo que hay en `lib/datos.ts` son promedios agregados y redondeados, sin nombres, contratos ni registros individuales. Los nombres de colaboradores de ejemplo son inventados.
 
-## Pendientes
+## Pendiente
 
-- [ ] Generar `.env.example` y configurar variables de entorno una vez se integre la base de datos PostgreSQL.
+- Conexión a Digiturno y carga de datos desde archivo.
+- Persistencia con Postgres y `.env.example` con las variables.
+- Horarios reales del personal y tiempo de traslado entre oficinas.
+- Avisos por WhatsApp o correo (hoy son solo una vista de ejemplo).
+- Confirmar con Surtigas el total de colaboradores y la explicación de las cancelaciones en el histórico.

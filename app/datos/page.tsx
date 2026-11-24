@@ -8,10 +8,10 @@ import { Encabezado } from "@/components/ui";
 const PASOS = ["Subir el archivo", "Revisar las columnas", "Ver el resumen", "Definir la meta"];
 
 const COLUMNAS = [
-  ["Oficina", "Dónde se atendió"],
-  ["Fecha y hora de llegada", "Para contar clientes por franja"],
-  ["Tiempo de atención", "Para calcular los minutos por atención"],
-  ["Tiempo de espera", "Para comparar con lo estimado"],
+  ["oficina", "Dónde se atendió (nombre de la oficina)"],
+  ["fecha", "Día del turno, en formato aaaa-mm-dd"],
+  ["hora", "Hora de llegada, para contar clientes por hora"],
+  ["minutos_atencion", "Duración de la atención, para calcular los minutos por visita"],
 ];
 
 export default async function Datos() {
@@ -36,7 +36,7 @@ export default async function Datos() {
         <div className="col-pila">
           <section className="card" aria-labelledby="subir">
             <h2 id="subir">1. Subir el archivo de Digiturno</h2>
-            <SubidaDatos />
+            <SubidaDatos oficinas={oficinas} />
           </section>
           <section className="card" aria-labelledby="cols">
             <h2 id="cols">2. Columnas que se leen</h2>
@@ -53,8 +53,8 @@ export default async function Datos() {
 
         <div className="col-pila">
           <section className="card" aria-labelledby="resumen">
-            <h2 id="resumen">3. Resumen de ejemplo</h2>
-            <p className="sub">Promedios de las últimas 8 semanas, solo viernes. Datos de ejemplo.</p>
+            <h2 id="resumen">3. Resumen de los datos</h2>
+            <p className="sub">Promedio por día hábil. Datos de ejemplo hasta que se cargue un archivo.</p>
             <ul className="datos-resumen">
               {OFICINAS_RESUMEN_DATOS.map((id) => {
                 const o = buscarOficina(oficinas, id);

@@ -156,7 +156,7 @@ export default async function Alertas() {
             </div>
             <p className="chico" style={{ marginTop: 8 }}>Panel de turnos · 8:00 a. m.</p>
           </section>
-          <ConfigAvisos />
+          <ConfigAvisos meta={meta} />
         </div>
       </div>
     </>

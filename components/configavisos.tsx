@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-export function ConfigAvisos() {
-  const [espera, setEspera] = useState("10");
+export function ConfigAvisos({ meta }: { meta: number }) {
+  const [espera, setEspera] = useState(String(meta));
   const [anticipacion, setAnticipacion] = useState("60");
   const [correo, setCorreo] = useState(true);
   const [whatsapp, setWhatsapp] = useState(true);
@@ -37,7 +37,9 @@ export function ConfigAvisos() {
           </label>
         </div>
       </fieldset>
-      <p className="chico" style={{ marginTop: 8 }}>Valores de ejemplo. Los define Surtigas.</p>
+      <p className="chico" style={{ marginTop: 8 }}>
+        Por ahora parte de la meta de espera del sistema ({meta} min). Valores de ejemplo: los define Surtigas.
+      </p>
     </section>
   );
 }

@@ -63,3 +63,40 @@ export async function actualizarMeta(meta: number): Promise<{ ok: true } | { ok:
   });
   return { ok: true };
 }
+
+/** Llegadas por hora (10 valores, de 7 a 16) y minutos por visita de una oficina, ya calculados. */
+export type DatosOficina = { id: string; llegadas: number[]; s: number };
+
+export type ResultadoImportacionAplicada = { ok: true; actualizadas: number } | { ok: false; error: string };
+
+/** Aplica los datos calculados de un archivo de Digiturno y recalcula las sugerencias. */
+export async function aplicarImportacion(datos: DatosOficina[]): Promise<ResultadoImportacionAplicada> {
+  if (!Array.isArray(datos) || datos.length === 0) return { ok: false, error: "No hay datos para aplicar" };
+  const validos = datos.every(
+    (d) =>
+      typeof d.id === "string" &&
+      Array.isArray(d.llegadas) &&
+      d.llegadas.length === 10 &&
+      d.llegadas.every((x) => Number.isFinite(x) && x >= 0 && x <= 10000) &&
+      Number.isFinite(d.s) &&
+      d.s > 0 &&
+      d.s <= 120,
+  );
+  if (!validos) return { ok: false, error: "Los datos del archivo no son válidos" };
+
+  let resultado: ResultadoImportacionAplicada = { ok: true, actualizadas: 0 };
+  escribirEstado((e) => {
+    if (datos.some((d) => !e.oficinas.some((o) => o.id === d.id))) {
+      resultado = { ok: false, error: "El archivo trae una oficina que no existe" };
+      return;
+    }
+    for (const d of datos) {
+      const o = e.oficinas.find((x) => x.id === d.id)!;
+      o.llegadas = [...d.llegadas];
+      o.s = d.s;
+    }
+    recalcularSugerencias(e);
+    resultado = { ok: true, actualizadas: datos.length };
+  });
+  return resultado;
+}
