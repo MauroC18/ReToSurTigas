@@ -5,6 +5,15 @@ const nextConfig: NextConfig = {
   experimental: {
     agentFeedback: true,
   },
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/panel",
+        permanent: false,
+      },
+    ];
+  },
   turbopack: {
     rules: {
       "*.css": {

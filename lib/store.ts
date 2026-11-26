@@ -29,14 +29,24 @@ function conexion(): postgres.Sql | null {
 
 type FilaSugerencia = {
   id: string;
-  origenId: string;
-  destinoId: string;
+  origenId?: string;
+  origen_id?: string;
+  destinoId?: string;
+  destino_id?: string;
   personas: number;
   modalidad: Modalidad;
   franjas: string[];
   estado: EstadoSugerencia;
 };
-type FilaAusencia = { id: string; colaborador: string; oficinaId: string; tipo: TipoAusencia; desde: string; hasta: string };
+type FilaAusencia = {
+  id: string;
+  colaborador: string;
+  oficinaId?: string;
+  oficina_id?: string;
+  tipo: TipoAusencia;
+  desde: string;
+  hasta: string;
+};
 
 /** Lee todo el estado con las cuatro consultas en paralelo. Devuelve null si la base está vacía. */
 async function cargar(sql: Conexion): Promise<Estado | null> {
@@ -53,18 +63,38 @@ async function cargar(sql: Conexion): Promise<Estado | null> {
   const config = configs[0];
   if (!config) return null;
 
+  if (process.env.VERCEL) {
+    console.log(`[VERCEL] oficinas: ${oficinas.length}, ausencias: ${ausencias.length}, sugerencias: ${sugerencias.length}, sugerencias[0] keys: ${sugerencias[0] ? Object.keys(sugerencias[0]).join(", ") : "none"}`);
+  }
+
   return {
     meta: config.meta,
     oficinas: oficinas.map((o) => ({ id: o.id, nombre: o.nombre, s: o.s, hay: o.hay, llegadas: Array.isArray(o.llegadas) ? [...o.llegadas] : [] })),
-    ausencias: ausencias.map((a): Ausencia => ({ ...a })),
-    sugerencias: sugerencias.map((s): Sugerencia => ({
-      ...s,
-      franjas: Array.isArray(s.franjas)
-        ? [...s.franjas]
-        : typeof s.franjas === "string"
-          ? (s.franjas as string).replace(/[{}]/g, "").split(",").map((f) => f.trim()).filter(Boolean)
-          : [],
-    })),
+    ausencias: ausencias
+      .map((a): Ausencia => ({
+        id: a.id,
+        colaborador: a.colaborador,
+        oficinaId: a.oficinaId ?? a.oficina_id ?? "",
+        tipo: a.tipo,
+        desde: String(a.desde),
+        hasta: String(a.hasta),
+      }))
+      .filter((a) => Boolean(a.oficinaId)),
+    sugerencias: sugerencias
+      .map((s): Sugerencia => ({
+        id: s.id,
+        origenId: s.origenId ?? s.origen_id ?? "",
+        destinoId: s.destinoId ?? s.destino_id ?? "",
+        personas: Number(s.personas),
+        modalidad: s.modalidad,
+        estado: s.estado,
+        franjas: Array.isArray(s.franjas)
+          ? [...s.franjas]
+          : typeof s.franjas === "string"
+            ? (s.franjas as string).replace(/[{}]/g, "").split(",").map((f) => f.trim()).filter(Boolean)
+            : [],
+      }))
+      .filter((s) => Boolean(s.origenId && s.destinoId)),
   };
 }
 
