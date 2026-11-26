@@ -2,6 +2,7 @@ import { OFICINAS_RESUMEN_DATOS } from "@/lib/datos";
 import { buscarOficina } from "@/lib/analisis";
 import { obtenerEstado } from "@/lib/api";
 import { FormMeta } from "@/components/formmeta";
+import { RestablecerDatos } from "@/components/restablecerdatos";
 import { SubidaDatos } from "@/components/subidadatos";
 import { Encabezado } from "@/components/ui";
 
@@ -72,6 +73,10 @@ export default async function Datos() {
           <section className="card" aria-labelledby="meta-t">
             <h2 id="meta-t">4. Meta de espera</h2>
             <FormMeta meta={meta} />
+          </section>
+          <section className="card" aria-labelledby="reset-t">
+            <h2 id="reset-t">5. Restablecer datos</h2>
+            <RestablecerDatos />
           </section>
         </div>
       </div>

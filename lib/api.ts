@@ -1,18 +1,13 @@
-import { escribirEstado, leerEstado } from "./store";
+import { cache } from "react";
+import { escribirEstado, leerEstado, restablecerEstado } from "./store";
 import { FRANJAS } from "./datos";
 import { simularMovimiento } from "./analisis";
 import { proponerApoyos } from "./motor";
 import { TIPOS_AUSENCIA, type Estado, type EstadoSugerencia, type Modalidad, type NuevaAusencia } from "./tipos";
 
-/**
- * Hoy lee y escribe en el estado en memoria. Cuando exista el servicio de
- * turnos con Postgres, solo se cambia este archivo y las pantallas no se tocan.
- */
+/** Lógica de negocio: las pantallas solo llaman a este archivo, nunca al almacenamiento. */
 
-/**
- * Recalcula las sugerencias del motor y conserva las decisiones ya tomadas.
- * Las que se enviaron a mano desde el simulador (id "manual-…") se dejan como están.
- */
+/** Recalcula las sugerencias del motor y conserva las decisiones ya tomadas y las manuales ("manual-…"). */
 function recalcularSugerencias(e: Estado): void {
   const decididas = new Map(e.sugerencias.filter((s) => s.estado !== "pendiente").map((s) => [s.id, s.estado]));
   const manuales = e.sugerencias.filter((s) => s.id.startsWith("manual-"));
@@ -20,9 +15,8 @@ function recalcularSugerencias(e: Estado): void {
   e.sugerencias = [...automaticas, ...manuales];
 }
 
-export async function obtenerEstado(): Promise<Estado> {
-  return structuredClone(await leerEstado());
-}
+/** Estado actual; `cache` evita leer la base dos veces en una misma visita. */
+export const obtenerEstado = cache(async (): Promise<Estado> => structuredClone(await leerEstado()));
 
 export async function decidirSugerencia(id: string, estado: EstadoSugerencia): Promise<void> {
   await escribirEstado((e) => {
@@ -145,4 +139,9 @@ export async function crearSugerenciaManual(datos: DatosSugerenciaManual): Promi
     resultado = { ok: true, id };
   });
   return resultado;
+}
+
+/** Vuelve a los datos de ejemplo para repetir la demo desde cero. */
+export async function restablecerDatos(): Promise<void> {
+  await restablecerEstado();
 }
