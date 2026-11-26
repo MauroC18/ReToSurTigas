@@ -1,89 +1,153 @@
 # Más allá del turno · Surtigas
 
-Prototipo para automatizar la gestión de turnos y la redistribución de personal en las 14 oficinas de atención de Surtigas. Toma la demanda por hora (histórico de Digiturno), las ausencias y una meta de espera, y propone qué oficinas necesitan apoyo y cuáles pueden darlo. Una persona aprueba o rechaza cada sugerencia.
+Sistema inteligente para la predicción, dimensionamiento y optimización de turnos de atención al cliente en las 14 oficinas presenciales de **Surtigas**.
 
-> Es un prototipo con datos agregados de mayo de 2026 y un estado en memoria. No está conectado todavía a Digiturno ni a una base de datos.
+A partir del análisis de demanda por hora (histórico de Digiturno), registro de ausencias y metas de nivel de servicio (SLA), el sistema calcula la dotación requerida, modela las colas de espera con arrastre horario y propone redistribuciones dinámicas de asesores entre sedes para evitar cuellos de botella. Cada sugerencia es validada y autorizada por el coordinador de turno.
 
-## Cómo correrlo
+---
 
-Requisitos: Node.js 20 o superior y npm.
+## Características Principales
 
-```bash
-npm install
-npm run dev      # http://localhost:3000
-npm run build    # compila para producción
-npm run lint     # revisa el código
-npx tsc --noEmit # revisa los tipos
+- **Panel de Control en Tiempo Real (`/panel`)**: KPIs críticos del día, sedes fuera de meta de espera, franjas críticas, sugerencias pendientes y gráfica interactiva de llegadas por sede.
+- **Malla Operativa y Exportación (`/malla`)**: Balance horario de personal (sobrantes y faltantes) para las 14 sedes, integración de apoyos aprobados y exportación a archivo CSV (`/malla/exportar`).
+- **Gestión de Alertas y Sugerencias (`/alertas`)**: Centro de aprobación y rechazo de traslados recomendados por el motor matemático.
+- **Simulador "¿Qué pasa si?" (`/que-pasa-si`)**: Modelado interactivo de contingencias y traslados manuales de personal entre oficinas con cálculo instantáneo de impacto en tiempos de espera.
+- **Control de Ausencias (`/ausencia`)**: Registro inmediato de licencias, incapacidades o permisos con recálculo automático de capacidad y sugerencias de apoyo.
+- **Gestión de Datos y Calibración (`/datos`)**: Ajuste dinámico de la meta de espera (SLA), carga de archivos CSV de Digiturno y función de restablecimiento a datos base de ejemplo.
+- **Persistencia Dual (PostgreSQL / Memoria)**: Conectado a **Supabase (PostgreSQL)** con pool de conexiones y bloqueos transaccionales (*advisory locks*); con respaldo transparente en memoria local si no hay base de datos configurada.
+
+---
+
+## Arquitectura Tecnológica
+
+- **Frontend & Backend**: Next.js 16 (App Router, Server Components y Server Actions con Turbopack).
+- **Lenguaje**: TypeScript en modo estricto.
+- **Base de Datos**: PostgreSQL alojado en **Supabase** (usando el driver `postgres` nativo con `serverExternalPackages`).
+- **Estilos**: Tailwind CSS 4.
+- **Control de Calidad e Integración**: ESLint, TypeScript Typecheck y GitHub Actions CI.
+- **Despliegue**: Optimizado para **Vercel**.
+
+```text
+surtigas-turno/
+├── app/                  # Rutas y páginas de la aplicación (App Router)
+│   ├── panel/            # Tablero principal de mando
+│   ├── malla/            # Malla horaria de personal y ruta /malla/exportar (CSV)
+│   ├── alertas/          # Aprobación de sugerencias
+│   ├── que-pasa-si/      # Simulador de contingencias
+│   ├── ausencia/         # Registro de ausencias
+│   └── datos/            # Configuración SLA, carga de CSV y reset
+├── components/           # Componentes modulares de interfaz de usuario
+├── db/                   # Scripts DDL de base de datos (schema.sql, reiniciar.sql)
+├── lib/                  # Lógica de negocio y modelos de datos
+│   ├── api.ts            # Fachada pública consumida por las vistas
+│   ├── store.ts          # Persistencia atómica en PostgreSQL / fallback en memoria
+│   ├── colas.ts          # Modelo de teoría de colas con arrastre entre franjas
+│   ├── erlang.ts         # Fórmulas de Erlang-C y formato de tiempos de espera
+│   ├── motor.ts          # Algoritmo de sugerencias automáticas de apoyo
+│   ├── importar.ts       # Parser y agregador de turnos desde CSV de Digiturno
+│   ├── analisis.ts       # Cálculos estadísticos y agrupaciones
+│   └── datos.ts          # Parámetros consolidados de las 14 sedes de Surtigas
+├── docs/                 # Documentación técnica de arquitectura y decisiones
+└── .github/              # Configuración de GitHub Actions (ci.yml)
 ```
 
-Los cambios que hagas en la app (ausencias, decisiones, meta) viven en la memoria del servidor: se pierden al reiniciarlo.
+> **Regla de Arquitectura**: Las pantallas (`app/`) y componentes (`components/`) consumen la lógica del sistema exclusivamente a través de la fachada en `lib/api.ts`. Nunca acceden directamente a la base de datos o almacenamiento interno.
 
-## Pantallas
+---
 
-| Ruta | Qué hace |
-|---|---|
-| `/panel` | Resumen del día: oficinas fuera de la meta, espera más larga y sugerencias |
-| `/malla` | Faltantes y sobrantes por oficina y franja, con los apoyos aprobados. Exporta a CSV |
-| `/alertas` | Sugerencias del motor para aprobar, rechazar o deshacer |
-| `/que-pasa-si` | Simula mover personas entre oficinas en las franjas que se elijan |
-| `/ausencia` | Registra una ausencia; descuenta a la persona y recalcula las sugerencias |
-| `/datos` | Meta de espera y resumen de los datos de ejemplo |
+## Requisitos e Instalación
 
-## Cómo calcula
+### Requisitos previos
+- **Node.js**: Versión 20.x o superior.
+- **npm**: Versión 10.x o superior.
 
-1. **Demanda:** llegadas promedio por hora y duración de la visita, por oficina (histórico de mayo de 2026).
-2. **Fila con arrastre (`lib/colas.ts`):** la fila de una hora se hereda a la siguiente. Capacidad por hora = (60 / minutos por visita) × personas × factor de la hora × eficiencia (0,85). Espera = fila promedio de la hora / capacidad.
-3. **Personas necesarias:** las que mantienen la espera por debajo de la meta en cada franja.
-4. **Motor de sugerencias (`lib/motor.ts`):** para cada franja, pone una persona de apoyo virtual de la oficina con holgura en la oficina con déficit. Solo deja las sugerencias que mejoran al destino y no dejan al origen fuera de la meta.
-5. **Apoyos aprobados:** solo las sugerencias aprobadas cambian la Malla y el Panel.
+### Instalación local
 
-### Límites del modelo (leer antes de presentarlo)
+1. Clonar el repositorio:
+   ```bash
+   git clone https://github.com/josephcharris/ReToSurTigas.git
+   cd ReToSurTigas
+   ```
 
-- Se calibró y se midió con un solo mes (mayo de 2026), sin datos separados para validar. Con ese mes, la correlación a nivel de oficina fue de 0,86 con un error medio de unos 11 minutos, y tiende a subestimar la espera en las oficinas pequeñas.
-- El cálculo por hora aislado (Erlang C) no sirvió: no explicaba las esperas reales porque ignora la fila heredada. Por eso se usa el modelo con arrastre.
-- Con el personal actual, la meta de 10 minutos no se alcanza en horas pico. Por eso la meta inicial es 30 minutos y es editable en `/datos`.
-- Reasignar entre oficinas ayuda poco: los faltantes están en la mañana y casi ninguna oficina tiene holgura a esa hora. Se necesita más personal en horas pico.
-- El reto menciona 36 colaboradores; el histórico muestra unos 31 atendiendo a la vez. Hay que confirmarlo con Surtigas.
-- Faltan los horarios reales del personal, el tiempo de traslado entre oficinas (solo se sugiere apoyo virtual) y más meses de datos.
+2. Instalar dependencias:
+   ```bash
+   npm install
+   ```
 
-## Estructura
+3. Configurar variables de entorno (Opcional para modo local):
+   Crea un archivo `.env` en la raíz del proyecto para conectar Supabase:
+   ```env
+   DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+   ```
+   *(Si omites `.env`, el sistema opera automáticamente con el estado en memoria RAM con datos de ejemplo).*
 
-```
-app/            pantallas (Next.js App Router) y /malla/exportar (CSV)
-components/     piezas de interfaz
-lib/
-  api.ts        única puerta de entrada a los datos para las pantallas
-  actions.ts    acciones de servidor (formularios)
-  store.ts      estado en memoria (se cambiará por Postgres)
-  datos.ts      oficinas, franjas y constantes del modelo
-  colas.ts      fila con arrastre y personas necesarias por hora
-  analisis.ts   cálculos para las pantallas
-  motor.ts      motor de sugerencias
-  erlang.ts     fórmulas de Erlang C y formato de esperas
-  tipos.ts      tipos compartidos
-docs/           documentación de arquitectura y decisiones
-```
+4. Iniciar el servidor de desarrollo:
+   ```bash
+   npm run dev
+   ```
+   Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
 
-**Regla de arquitectura:** las pantallas y los componentes solo leen y escriben datos a través de `lib/api.ts`. Así, cuando entre Postgres, solo cambian `api.ts` y `store.ts`.
+5. Comprobaciones de calidad:
+   ```bash
+   npx tsc --noEmit   # Comprobación de tipos
+   npm run lint       # Análisis estático de código
+   npm run build      # Compilación de producción
+   ```
 
-## Cómo trabajamos
+---
 
-- `main`: versión estable. No se hace commit directo.
-- `develop`: rama de integración.
-- `feature/…`, `fix/…`, `docs/…`: una rama por tarea, desde `develop`, con Pull Request hacia `develop` y revisión del compañero.
-- Commits en español con Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
-- Antes de cada commit: `npx tsc --noEmit`, `npm run lint` y `npm run build`.
+## Modelo Matemático y Motor de Decisión
 
-Más detalle en [CONTRIBUTING.md](CONTRIBUTING.md) y en [docs/README.md](docs/README.md).
+1. **Demanda Horaria**: Se procesan las llegadas promedio de clientes por oficina para cada una de las 8 franjas horarias del día (8:00 a. m. a 4:00 p. m.) junto con los tiempos medios de atención ($T_{\text{servicio}}$).
+2. **Modelo de Colas con Arrastre (`lib/colas.ts`)**:
+   - A diferencia de Erlang-C tradicional (que asume que cada hora inicia en cero), este sistema traslada la fila residual de clientes no atendidos de una hora a la franja siguiente.
+   - $\text{Capacidad Horaria} = \left(\frac{60}{T_{\text{servicio}}}\right) \times \text{Asesores} \times \text{Factor de franja} \times \text{Eficiencia (0.85)}$.
+   - $\text{Espera estimada} = \frac{\text{Fila promedio acumulada}}{\text{Capacidad}}$.
+3. **Cálculo de Dotación Óptima**: Determina el número mínimo de asesores requeridos por franja para mantener el tiempo de espera por debajo de la meta de SLA (por defecto 30 minutos, ajustable en `/datos`).
+4. **Motor de Apoyos Virtuales (`lib/motor.ts`)**:
+   - Identifica simultáneamente oficinas con déficit crítico y oficinas con holgura de asesores.
+   - Evalúa candidatos de apoyo bajo modalidad virtual (sin tiempo muerto de desplazamiento).
+   - Genera la recomendación únicamente si el destino mejora sustancialmente su tiempo de espera sin que la sede de origen caiga fuera de la meta.
 
-## Privacidad de los datos
+---
 
-El histórico original de Digiturno es privado y **no está en este repositorio** ni debe subirse (`*.xlsx`, `*.csv` y `.env*` están en `.gitignore`). Todo lo que hay en `lib/datos.ts` son promedios agregados y redondeados, sin nombres, contratos ni registros individuales. Los nombres de colaboradores de ejemplo son inventados.
+## Despliegue en Vercel
 
-## Pendiente
+El proyecto está listo para producción en Vercel sin necesidad de `vercel.json`:
 
-- Conexión a Digiturno y carga de datos desde archivo.
-- Persistencia con Postgres y `.env.example` con las variables.
-- Horarios reales del personal y tiempo de traslado entre oficinas.
-- Avisos por WhatsApp o correo (hoy son solo una vista de ejemplo).
-- Confirmar con Surtigas el total de colaboradores y la explicación de las cancelaciones en el histórico.
+1. Importa el repositorio desde el panel de **Vercel**.
+2. **Framework Preset**: Detectará automáticamente `Next.js`.
+3. **Variables de Entorno**:
+   - Agrega `DATABASE_URL` con tu cadena de conexión a Supabase (Transaction Pooler).
+   - Márcala para los 3 entornos: *Production*, *Preview* y *Development*.
+4. **Región de Serverless Functions**:
+   - En Vercel: **Settings → Functions → Function Region**.
+   - Selecciona la misma región de AWS en la que creaste tu base de datos en Supabase para reducir la latencia de conexión.
+5. Haz clic en **Deploy**.
+
+---
+
+## Flujo de Trabajo y Buenas Prácticas (Git)
+
+- **`main`**: Rama de producción y versiones estables protegida. Solo recibe merges probados desde `develop`.
+- **`develop`**: Rama base de integración activa del equipo.
+- **Ramas de trabajo**: Se crean desde `develop` con nomenclatura `feature/nombre-tarea`, `fix/nombre-bug` o `docs/tema`.
+- **Commits**: Formato *Conventional Commits* en español (`feat:`, `fix:`, `docs:`, `chore:`).
+- **Integración Continua (CI)**: Cada Pull Request o push hacia `main` o `develop` ejecuta automáticamente comprobación de tipos, linting y build en GitHub Actions.
+
+Para conocer más detalles del flujo colaborativo, consulta [CONTRIBUTING.md](CONTRIBUTING.md) y [docs/README.md](docs/README.md).
+
+---
+
+## Seguridad y Privacidad de los Datos
+
+> [!IMPORTANT]
+> - El archivo histórico original de Digiturno (`Historicos_Turnos_MAY2026.xlsx`), datasets crudos (`*.xlsx`, `*.csv`, `*.pkl`) y credenciales (`.env*`) están estrictamente ignorados por Git y **nunca deben subirse al repositorio**.
+> - La base de datos y el archivo `lib/datos.ts` manejan únicamente promedios consolidados y anónimos, sin registros transaccionales ni datos personales sensibles de usuarios o colaboradores.
+
+---
+
+## Versiones Publicadas
+
+- **`v1.0.0-entrega`**: Versión base con motor de sugerencias, malla con fila heredada y exportación a CSV.
+- **`v1.1.0`**: Integración con PostgreSQL (Supabase), restablecimiento de datos y optimización de conexiones.
