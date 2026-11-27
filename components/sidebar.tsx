@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 const OPCIONES = [
   { href: "/panel", etiqueta: "Panel del día" },
@@ -14,17 +15,37 @@ const OPCIONES = [
 
 export function Sidebar({ pendientes }: { pendientes: number }) {
   const ruta = usePathname();
+  const [abierto, setAbierto] = useState(false);
   return (
     <aside className="sidebar">
-      <h2>Panel de turnos</h2>
-      <p className="version">Versión B · con teoría de colas</p>
-      <nav aria-label="Principal">
+      <div className="sidebar-cabecera">
+        <div>
+          <h2>Panel de turnos</h2>
+          <p className="version">Versión B · con teoría de colas</p>
+        </div>
+        <button
+          type="button"
+          className="menu-btn"
+          aria-expanded={abierto}
+          aria-controls="menu-principal"
+          onClick={() => setAbierto(!abierto)}
+        >
+          {abierto ? "Cerrar" : "Menú"}
+          {!abierto && pendientes > 0 && (
+            <span className="insignia" aria-label={`${pendientes} pendientes`}>
+              {pendientes}
+            </span>
+          )}
+        </button>
+      </div>
+      <nav id="menu-principal" aria-label="Principal" className={abierto ? "abierto" : undefined}>
         {OPCIONES.map((o) => (
           <Link
             key={o.href}
             href={o.href}
             className="nav-link"
             aria-current={ruta === o.href ? "page" : undefined}
+            onClick={() => setAbierto(false)}
           >
             {o.etiqueta}
             {o.href === "/alertas" && pendientes > 0 && (
